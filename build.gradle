@@ -4,7 +4,7 @@ plugins {
   id 'jacoco'
   id 'maven-publish'
   id "com.github.ben-manes.versions" version "0.67.0"
-  id "org.cyclonedx.bom" version "3.6.1"
+  id "org.cyclonedx.bom" version "3.6.0"
   id 'pmd'
 }
 
@@ -22,13 +22,11 @@ apply {
 }
 
 ext {
-  springBootVersion = "4.2.0"
+  springBootVersion = "4.1.2"
   lombokVersion = "1.18.48"
 }
 
 dependencies {
-  implementation "org.openapitools:openapi-generator-core:7.27.0"
-  implementation "io.swagger.parser.v3:swagger-parser:2.1.49"
   implementation "io.swagger.core.v3:swagger-annotations:3.0.0"
   implementation "net.logstash.logback:logstash-logback-encoder:9.0"
 
@@ -36,6 +34,14 @@ dependencies {
   implementation "org.springframework.boot:spring-boot-starter-web:$springBootVersion"
   implementation "org.springframework.boot:spring-boot-starter-validation:$springBootVersion"
   testImplementation "org.springframework.boot:spring-boot-starter-test:$springBootVersion"
+
+  constraints {
+    // CVE-2026-110879: CRITICAL deserialization bypass — floor at 3.1.8
+    // Remove once Spring Boot manages jackson-databind >= 3.1.8
+    implementation('tools.jackson.core:jackson-databind:3.3.0') {
+      because 'CVE-2026-110879'
+    }
+  }
 
   compileOnly "org.projectlombok:lombok:$lombokVersion"
   testCompileOnly "org.projectlombok:lombok:$lombokVersion"

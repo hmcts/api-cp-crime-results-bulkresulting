@@ -1,26 +1,34 @@
 openapi: 3.0.0
-servers:
-  - description: API Marketplace api - mocking example api
-    url: https://virtserver.swaggerhub.com/HMCTS-DTS/api-hmcts-crime-template/1.0.0
 
 info:
-  title: API Marketplace api - example api
-  description: API Marketplace api - simple example
-  version: 1.0.0
+  title: Bulk Resulting for Enforcement API
+  description: >-
+    API for finding enforcement hearings that can be resulted together, and for the
+    settings the bulk resulting journey must follow. All paths are relative to the
+    service context path.
+  version: 0.1.0
   contact:
     email: no-reply@hmcts.com
   license:
     name: MIT
     url: 'https://opensource.org/licenses/MIT'
 
+tags:
+  - name: root
+    description: Service root
+  - name: hearings
+    description: Search for hearings eligible for bulk resulting
+  - name: config
+    description: Settings the bulk resulting journey must follow
+
 paths:
   /:
     get:
-      description: Root endpoint
       operationId: getRoot
       tags:
         - root
-
+      summary: Root endpoint
+      description: Returns a simple greeting, used to check the service is up
       responses:
         '200':
           description: OK
@@ -30,65 +38,396 @@ paths:
                 type: string
                 example: Hello
 
-  /example/{example_id}:
+  /hearings:
     get:
-      description: Get example for example_id
-      operationId: getExampleByExampleId
+      operationId: searchHearings
       tags:
-        - examples
+        - hearings
+      summary: Search for hearings eligible for bulk resulting
+      description: >-
+        Returns the allocated magistrates' enforcement hearings at a court that are
+        eligible for bulk resulting, one page at a time. Single-day hearings only.
+        Hearings already shared for the day, hearings with a court application and
+        hearings already in flight in a bulk batch are excluded. Rows are sorted by
+        hearing date, courtroom, then the lead defendant's first name, and grouped by
+        hearing date and courtroom. The dates must lie between today and today plus
+        searchWindowDays (see GET /config).
       parameters:
-        - in: path
-          name: example_id
+        - $ref: '#/components/parameters/CjscppuidHeader'
+        - $ref: '#/components/parameters/CppclientcorrelationidHeader'
+        - in: query
+          name: ouCode
           required: true
-          description: Unique id for the example - long
+          description: OU code of the court centre. Must be one of the caller's court centres.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 20
+            example: B01LY00
+        - in: query
+          name: courtRoomId
+          required: false
+          description: Reference data id of a courtroom at the court centre. All courtrooms when omitted.
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: startDate
+          required: true
+          description: First hearing date to include
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: endDate
+          required: false
+          description: Last hearing date to include. Defaults to startDate.
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: session
+          required: false
+          description: Court session. ANY when omitted.
+          schema:
+            $ref: '#/components/schemas/CourtSession'
+        - in: query
+          name: businessType
+          required: false
+          description: Enforcement business type. Both ENF and ENF_AUTO when omitted.
+          schema:
+            $ref: '#/components/schemas/BusinessType'
+        - in: query
+          name: page
+          required: false
+          description: Page number, starting at 1
           schema:
             type: integer
-            format: int64
+            format: int32
+            minimum: 1
+            default: 1
       responses:
         '200':
-          description:  Examples found
+          description: A page of eligible hearings
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ExampleResponse"
+                $ref: '#/components/schemas/HearingSearchResponse'
         '400':
-          description: Bad input parameter
+          description: >-
+            Invalid filter, for example a start date in the past, an end date beyond
+            today plus searchWindowDays, or an end date before the start date
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '401':
+          description: The CJSCPPUID header is missing
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '403':
+          description: The court is not one of the caller's court centres, or the caller is not permitted
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: >-
+            Too many matching hearings to show a complete list (code TOO_MANY_RESULTS).
+            The caller should narrow the filter.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '502':
+          description: A Common Platform dependency returned an error
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: A Common Platform dependency is unavailable or timed out
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /config:
+    get:
+      operationId: getConfig
+      tags:
+        - config
+      summary: Settings the bulk resulting journey must follow
+      description: Returns the configured batch size and search date window, so the UI follows the service's settings
+      parameters:
+        - $ref: '#/components/parameters/CjscppuidHeader'
+        - $ref: '#/components/parameters/CppclientcorrelationidHeader'
+      responses:
+        '200':
+          description: Current settings
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: '#/components/schemas/BulkResultingConfig'
+        '401':
+          description: The CJSCPPUID header is missing
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
 
 components:
-  schemas:
-    ExampleResponse:
-      description: Details of examples associated with the example id
-      type: object
-      properties:
-        exampleId:
-          description: Id of the example - long
-          type: integer
-          format: int64
-        exampleText:
-          description: Information associated with the example id
-          type: string
-          example: "Some text"
+  parameters:
+    CjscppuidHeader:
+      in: header
+      name: CJSCPPUID
+      required: true
+      schema:
+        type: string
+      description: User identifier for CP authentication, set by the gateway
 
-    ErrorResponse:
+    CppclientcorrelationidHeader:
+      in: header
+      name: CPPCLIENTCORRELATIONID
+      required: false
+      schema:
+        type: string
+      description: Session-level correlation ID from UI
+
+  schemas:
+    CourtSession:
+      type: string
+      enum:
+        - ANY
+        - AM
+        - PM
+        - AD
+      description: Court session. AD is all day.
+
+    BusinessType:
+      type: string
+      enum:
+        - ENF
+        - ENF_AUTO
+      description: Enforcement business type code sent to listing
+
+    HearingSearchResponse:
       type: object
+      required:
+        - page
+        - pageSize
+        - totalPages
+        - totalMatched
+        - displayedCount
+        - inFlightCount
+        - groups
       properties:
-        error:
+        page:
+          type: integer
+          format: int32
+          minimum: 1
+          description: This page number, starting at 1
+        pageSize:
+          type: integer
+          format: int32
+          minimum: 1
+          description: Maximum number of hearing rows on a page
+        totalPages:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Number of pages. 0 when nothing matches.
+        totalMatched:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Number of eligible hearings across all pages
+        displayedCount:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Number of hearing rows on this page
+        inFlightCount:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Number of the caller's own hearings currently in flight in bulk batches
+        groups:
+          type: array
+          description: >-
+            This page's hearing rows grouped by hearing date, then courtroom, in display order.
+            A group that spans pages appears on each page it has rows on.
+          items:
+            $ref: '#/components/schemas/HearingGroup'
+
+    HearingGroup:
+      type: object
+      required:
+        - hearingDate
+        - hearings
+      properties:
+        hearingDate:
           type: string
-          description: Machine-readable error code
-        message:
+          format: date
+        courtRoomId:
           type: string
-          description: Human-readable error message
-        details:
-          type: object
-          additionalProperties: true
-          description: Additional error context
-        timestamp:
+          format: uuid
+          description: Reference data id of the courtroom
+        courtRoomName:
           type: string
-          format: date-time
-        traceId:
+          description: Courtroom name from reference data
+        hearings:
+          type: array
+          description: Hearing rows in display order (lead defendant's first name)
+          items:
+            $ref: '#/components/schemas/EligibleHearing'
+
+    EligibleHearing:
+      type: object
+      description: >-
+        One row per hearing. The display fields describe the hearing's lead defendant;
+        cases carries every case and defendant on the hearing.
+      required:
+        - hearingId
+        - failedToShare
+        - offenceTitles
+        - cases
+      properties:
+        hearingId:
           type: string
-          description: Unique identifier for error tracing
+          format: uuid
+        hearingType:
+          type: string
+          description: Hearing type description from listing
+        failedToShare:
+          type: boolean
+          description: True when the latest bulk attempt for this hearing did not share
+        defendantName:
+          type: string
+          description: >-
+            Lead defendant's name ready to display: first and last name, or the
+            organisation name followed by " (C)" for a corporate defendant
+        firstName:
+          type: string
+        lastName:
+          type: string
+        organisationName:
+          type: string
+          description: Set when the lead defendant is an organisation
+        dateOfBirth:
+          type: string
+          format: date
+        accountNumber:
+          type: string
+          description: Account number (GoB) of the lead defendant's case. Absent when the case has none.
+        urn:
+          type: string
+          description: URN of the lead defendant's case
+        offenceTitles:
+          type: array
+          description: Titles of the lead defendant's offences
+          items:
+            type: string
+        cases:
+          type: array
+          items:
+            $ref: '#/components/schemas/HearingCase'
+
+    HearingCase:
+      type: object
+      required:
+        - caseId
+        - defendants
+      properties:
+        caseId:
+          type: string
+          format: uuid
+        urn:
+          type: string
+          description: Case reference (URN)
+        accountNumber:
+          type: string
+          description: Enforcement account number (the case's related URN). Absent when the case has none.
+        defendants:
+          type: array
+          items:
+            $ref: '#/components/schemas/HearingDefendant'
+
+    HearingDefendant:
+      type: object
+      required:
+        - defendantId
+        - offences
+      properties:
+        defendantId:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        organisationName:
+          type: string
+          description: Set when the defendant is an organisation
+        dateOfBirth:
+          type: string
+          format: date
+        offences:
+          type: array
+          items:
+            $ref: '#/components/schemas/HearingOffence'
+
+    HearingOffence:
+      type: object
+      required:
+        - offenceId
+      properties:
+        offenceId:
+          type: string
+          format: uuid
+        offenceCode:
+          type: string
+        offenceTitle:
+          type: string
+
+    BulkResultingConfig:
+      type: object
+      required:
+        - maxBatchSize
+        - searchWindowDays
+      properties:
+        maxBatchSize:
+          type: integer
+          format: int32
+          minimum: 1
+          description: Maximum number of hearings in one bulk submission
+          example: 100
+        searchWindowDays:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Number of days after today that a search may reach. Past dates cannot be searched.
+          example: 28
+
+    Problem:
+      type: object
+      description: RFC 9457 problem details
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+          format: int32
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri
+        code:
+          type: string
+          description: Machine-readable error code, for example TOO_MANY_RESULTS
