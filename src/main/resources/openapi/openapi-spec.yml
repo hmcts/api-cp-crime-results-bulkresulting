@@ -49,7 +49,7 @@ paths:
         eligible for bulk resulting, one page at a time. Single-day hearings only.
         Hearings already shared for the day, hearings with a court application and
         hearings already in flight in a bulk batch are excluded. Rows are sorted by
-        hearing date, courtroom, then the lead defendant's first name, and grouped by
+        hearing date, courtroom, then the displayed defendant's first name, and grouped by
         hearing date and courtroom. The dates must lie between today and today plus
         searchWindowDays (see GET /config).
       parameters:
@@ -280,14 +280,15 @@ components:
           description: Courtroom name from reference data
         hearings:
           type: array
-          description: Hearing rows in display order (lead defendant's first name)
+          description: Hearing rows in display order (displayed defendant's first name)
           items:
             $ref: '#/components/schemas/EligibleHearing'
 
     EligibleHearing:
       type: object
       description: >-
-        One row per hearing. The display fields describe the hearing's lead defendant;
+        One row per hearing. The display fields describe one defendant on the hearing
+        (the first defendant of the first case, as returned by listing);
         cases carries every case and defendant on the hearing.
       required:
         - hearingId
@@ -307,7 +308,7 @@ components:
         defendantName:
           type: string
           description: >-
-            Lead defendant's name ready to display: first and last name, or the
+            Displayed defendant's name ready to display: first and last name, or the
             organisation name followed by " (C)" for a corporate defendant
         firstName:
           type: string
@@ -315,19 +316,19 @@ components:
           type: string
         organisationName:
           type: string
-          description: Set when the lead defendant is an organisation
+          description: Set when the displayed defendant is an organisation
         dateOfBirth:
           type: string
           format: date
         accountNumber:
           type: string
-          description: Account number (GoB) of the lead defendant's case. Absent when the case has none.
+          description: Account number (GoB) of the displayed defendant's case. Absent when the case has none.
         urn:
           type: string
-          description: URN of the lead defendant's case
+          description: URN of the displayed defendant's case
         offenceTitles:
           type: array
-          description: Titles of the lead defendant's offences
+          description: Titles of the displayed defendant's offences
           items:
             type: string
         cases:
